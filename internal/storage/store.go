@@ -92,12 +92,6 @@ func recoverCompletedRuns(snapshot *domain.Snapshot) error {
 		if run.State != domain.RunCompleted {
 			continue
 		}
-		if run.CompletionDigest == "" {
-			return fmt.Errorf(
-				"completed run %s is missing the completion digest",
-				id,
-			)
-		}
 		formula, found := snapshot.Formulas[run.FormulaID]
 		if !found {
 			return fmt.Errorf(

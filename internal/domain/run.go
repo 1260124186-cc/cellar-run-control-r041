@@ -218,8 +218,14 @@ func (r FermentationRun) ValidateCompletionSnapshot() error {
 	return nil
 }
 
-// RehydrateCompletion rebuilds the derived completion metrics while loading a
-// persisted snapshot.
+// RehydrateCompletion restores the binding of a persisted, already completed
+// run while loading a snapshot. The metrics confirmed at completion time are
+// the authoritative fact and are never recomputed from the observations, so a
+// run reads identically before and after a restart. Snapshots written by older
+// controllers that predate the completion digest, as well as digests produced
+// by the first upgraded build that bound the pre-completion version, are
+// accepted and rebound in memory; a digest that matches neither shape signals
+// corrupt state.
 func (r *FermentationRun) RehydrateCompletion(originalGravity float64) error {
 	if r.State != RunCompleted {
 		return nil
@@ -230,14 +236,28 @@ func (r *FermentationRun) RehydrateCompletion(originalGravity float64) error {
 	if r.EndedAt == nil {
 		return fmt.Errorf("completed run %s has no completion time", r.ID)
 	}
-	derivedOriginal := originalGravity
-	if first := r.Observations[0].Gravity; first > 0 {
-		derivedOriginal = first
+	if r.Metrics == nil {
+		// Only snapshots predating the persisted quality metrics reach this
+		// branch; derive them the same way the completion transition does.
+		metrics := CalculateMetrics(originalGravity,
+			r.Observations[len(r.Observations)-1].Gravity, len(r.Observations))
+		r.Metrics = &metrics
 	}
-	final := r.Observations[len(r.Observations)-1]
-	metrics := CalculateMetrics(derivedOriginal, final.Gravity, len(r.Observations))
-	r.Metrics = &metrics
-	r.CompletionDigest = r.ExpectedCompletionDigest()
+	canonical := r.ExpectedCompletionDigest()
+	switch r.CompletionDigest {
+	case "", canonical:
+		// Legacy snapshot without the upgrade-added digest, or an
+		// already consistent one.
+	case CompletionDigest(r.ID, r.Version-1, *r.Metrics, *r.EndedAt, len(r.Observations)):
+		// Snapshot produced by the first upgraded build, which bound the
+		// digest to the pre-completion version instead of the final one.
+	default:
+		return fmt.Errorf(
+			"completed run %s has a completion digest that does not match its final version",
+			r.ID,
+		)
+	}
+	r.CompletionDigest = canonical
 	return nil
 }
 
