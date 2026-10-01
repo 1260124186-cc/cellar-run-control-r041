@@ -218,25 +218,22 @@ func (r FermentationRun) ValidateCompletionSnapshot() error {
 	return nil
 }
 
-// RehydrateCompletion rebuilds the derived completion metrics while loading a
-// persisted snapshot.
-func (r *FermentationRun) RehydrateCompletion(originalGravity float64) error {
+// RehydrateCompletion restores the derived completion digest while loading a
+// persisted snapshot. The persisted metrics are the quality result confirmed
+// at completion, so they are never recomputed here; the digest is derived
+// deterministically from the persisted run facts. Snapshots written before
+// the digest existed, or with a digest that no longer matches those facts,
+// are healed in memory without altering the confirmed metrics.
+func (r *FermentationRun) RehydrateCompletion() error {
 	if r.State != RunCompleted {
 		return nil
 	}
-	if len(r.Observations) == 0 {
-		return fmt.Errorf("completed run %s has no observations to restore", r.ID)
+	if r.Metrics == nil {
+		return fmt.Errorf("completed run %s has no quality metrics", r.ID)
 	}
 	if r.EndedAt == nil {
 		return fmt.Errorf("completed run %s has no completion time", r.ID)
 	}
-	derivedOriginal := originalGravity
-	if first := r.Observations[0].Gravity; first > 0 {
-		derivedOriginal = first
-	}
-	final := r.Observations[len(r.Observations)-1]
-	metrics := CalculateMetrics(derivedOriginal, final.Gravity, len(r.Observations))
-	r.Metrics = &metrics
 	r.CompletionDigest = r.ExpectedCompletionDigest()
 	return nil
 }

@@ -79,7 +79,6 @@ func (s *Service) CompleteRun(
 		if !ok {
 			return domain.NewError(domain.CodeFormulaNotFound, "attached formula was not found")
 		}
-		completionVersion := run.Version
 		if err := run.Complete(formula.TargetOriginalGravity, s.clock.Now()); err != nil {
 			return err
 		}
@@ -87,13 +86,6 @@ func (s *Service) CompleteRun(
 			return domain.NewError(domain.CodeStorage,
 				"completed run did not produce a completion digest")
 		}
-		run.CompletionDigest = domain.CompletionDigest(
-			run.ID,
-			completionVersion,
-			*run.Metrics,
-			*run.EndedAt,
-			len(run.Observations),
-		)
 		if run.VesselID == nil {
 			return domain.NewError(domain.CodeRunState, "run has no vessel")
 		}
